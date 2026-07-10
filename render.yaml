@@ -9,3 +9,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APIFY_TOKEN
+        sync: false
+      - key: APIFY_ACTOR_ID
+        value: amurich/price-monitor-ozon-wildberries-yandex-market-avito
+      - key: APIFY_MAX_PAGES
+        value: "1"
+      - key: APIFY_MAX_ITEMS
+        value: "10"
+      - key: APIFY_TIMEOUT_MS
+        value: "120000"
