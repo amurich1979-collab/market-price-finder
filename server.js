@@ -5,7 +5,7 @@ const path = require("path");
 const root = __dirname;
 const port = Number(process.env.PORT || 5177);
 const apifyToken = process.env.APIFY_TOKEN || "";
-const apifyActorId = process.env.APIFY_ACTOR_ID || "amurich/price-monitor-ozon-wildberries-yandex-market-avito";
+const apifyActorId = process.env.APIFY_ACTOR_ID || "isolovyev/ru-marketplaces-price-monitor";
 const apifyTimeoutMs = Number(process.env.APIFY_TIMEOUT_MS || 120000);
 
 const marketplaces = {
@@ -35,7 +35,17 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/search") {
     const query = (url.searchParams.get("q") || "").trim();
-    sendJson(res, await searchAll(query));
+    try {
+      sendJson(res, await searchAll(query));
+    } catch (error) {
+      sendJson(res, {
+        results: [],
+        winner: null,
+        statuses: [{ marketplace: "apify", ok: false, message: error.message || "Ошибка поиска." }],
+        suggestions: [],
+        note: error.message || "Ошибка поиска."
+      }, 500);
+    }
     return;
   }
 
@@ -149,10 +159,17 @@ async function searchWithApify(query) {
 function buildApifyInput(query) {
   return {
     mode: "search",
-    marketplaces: ["ozon", "wildberries", "yandexmarket"],
-    searchKeywords: [query],
+    platforms: ["ozon", "yandexmarket", "wildberries"],
+    queries: [query],
     maxPagesPerQuery: Number(process.env.APIFY_MAX_PAGES || 1),
-    maxItemsPerQuery: Number(process.env.APIFY_MAX_ITEMS || 10)
+    maxItemsPerQuery: Number(process.env.APIFY_MAX_ITEMS || 10),
+    alertOnly: true,
+    flagUnderpriced: false,
+    proxyConfiguration: {
+      useApifyProxy: true,
+      apifyProxyGroups: ["RESIDENTIAL"],
+      apifyProxyCountry: "RU"
+    }
   };
 }
 
@@ -541,7 +558,7 @@ function serveStatic(pathname, res) {
   });
 }
 
-function sendJson(res, payload) {
-  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, payload, status = 200) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
 }

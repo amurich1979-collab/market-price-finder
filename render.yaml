@@ -12,7 +12,7 @@ services:
       - key: APIFY_TOKEN
         sync: false
       - key: APIFY_ACTOR_ID
-        value: amurich/price-monitor-ozon-wildberries-yandex-market-avito
+        value: isolovyev/ru-marketplaces-price-monitor
       - key: APIFY_MAX_PAGES
         value: "1"
       - key: APIFY_MAX_ITEMS
