@@ -159,6 +159,12 @@ button,
   gap: 8px;
 }
 
+.history-panel small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .history-chip {
   min-height: 34px;
   padding: 0 12px;

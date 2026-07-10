@@ -60,7 +60,13 @@ els.form.addEventListener("submit", async (event) => {
 
 els.query.addEventListener("input", () => {
   window.clearTimeout(suggestTimer);
-  suggestTimer = window.setTimeout(() => loadSuggestions(els.query.value.trim()), 260);
+  const query = els.query.value.trim();
+  fillSuggestionOptions(state.suggestions, query);
+  suggestTimer = window.setTimeout(() => loadSuggestions(query), 260);
+});
+
+els.query.addEventListener("focus", () => {
+  fillSuggestionOptions(state.suggestions, els.query.value.trim());
 });
 
 els.manualForm.addEventListener("submit", (event) => {
@@ -125,7 +131,7 @@ async function search(query) {
     state.statuses = payload.statuses || [];
     state.suggestions = payload.suggestions || [];
     els.status.textContent = payload.note || "Готово.";
-    fillSuggestionOptions(state.suggestions);
+    fillSuggestionOptions(state.suggestions, query);
   } catch {
     els.status.textContent = "Не удалось обратиться к локальному API. Проверьте, что server.js запущен.";
   }
@@ -133,26 +139,47 @@ async function search(query) {
 }
 
 async function loadSuggestions(query) {
-  if (query.length < 2 || els.demoMode.checked) return;
+  if (query.length < 2 || els.demoMode.checked) {
+    fillSuggestionOptions([], query);
+    return;
+  }
 
   try {
     const response = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
     const payload = await response.json();
-    fillSuggestionOptions(payload.suggestions || []);
+    state.suggestions = payload.suggestions || [];
+    fillSuggestionOptions(state.suggestions, query);
   } catch {
     // Suggestions are helpful, not critical.
   }
 }
 
-function fillSuggestionOptions(suggestions) {
-  els.suggestions.replaceChildren(
-    ...suggestions.map((item) => {
+function fillSuggestionOptions(suggestions, query = "") {
+  const normalizedQuery = query.toLowerCase();
+  const historySuggestions = state.history
+    .filter((item) => !normalizedQuery || item.toLowerCase().includes(normalizedQuery))
+    .map((text) => ({ text, label: "история" }));
+  const productSuggestions = suggestions.map((item) => ({
+    text: item.text,
+    label: item.price ? `${MARKETPLACES[item.marketplace]?.name || "найдено"} · ${formatRub(item.price)}` : "найдено"
+  }));
+  const seen = new Set();
+  const options = [...historySuggestions, ...productSuggestions]
+    .filter((item) => {
+      const key = item.text.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 18)
+    .map((item) => {
       const option = document.createElement("option");
       option.value = item.text;
-      option.label = item.price ? `${MARKETPLACES[item.marketplace]?.name || "найдено"} · ${formatRub(item.price)}` : "найдено";
+      option.label = item.label;
       return option;
-    })
-  );
+    });
+
+  els.suggestions.replaceChildren(...options);
 }
 
 function getDemoResults(query) {
@@ -277,9 +304,10 @@ function startManualOverride(item) {
 
 function rememberSearch(query) {
   const normalized = query.trim();
-  state.history = [normalized, ...state.history.filter((item) => item.toLowerCase() !== normalized.toLowerCase())].slice(0, 10);
+  state.history = [normalized, ...state.history.filter((item) => item.toLowerCase() !== normalized.toLowerCase())].slice(0, 30);
   localStorage.setItem("searchHistory", JSON.stringify(state.history));
   renderHistory();
+  fillSuggestionOptions(state.suggestions, normalized);
 }
 
 function renderHistory() {
