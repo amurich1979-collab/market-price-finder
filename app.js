@@ -311,6 +311,7 @@ function formatRub(value) {
 function sourceLabel(source) {
   return {
     demo: "демо",
+    apify: "apify",
     live: "live",
     manual: "вручную",
     loading: "поиск",
@@ -319,6 +320,7 @@ function sourceLabel(source) {
 }
 
 function metaText(item) {
+  if (item.source === "apify") return `Данные Apify. Похожесть с запросом: ${item.score ?? "?"}%.`;
   if (item.source === "live") return `Живая цена. Похожесть с запросом: ${item.score ?? "?"}%.`;
   if (item.source === "manual") return "Цена добавлена вручную и участвует в сравнении.";
   if (item.source === "demo") return "Тестовая цена. Если нашли дешевле, укажите цену ниже.";

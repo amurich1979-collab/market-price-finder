@@ -4,6 +4,9 @@ const path = require("path");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 5177);
+const apifyToken = process.env.APIFY_TOKEN || "";
+const apifyActorId = process.env.APIFY_ACTOR_ID || "amurich/price-monitor-ozon-wildberries-yandex-market-avito";
+const apifyTimeoutMs = Number(process.env.APIFY_TIMEOUT_MS || 120000);
 
 const marketplaces = {
   ozon: {
@@ -54,6 +57,10 @@ async function searchAll(query) {
     return { results: [], groups: [], statuses: [], suggestions: [], note: "Введите поисковый запрос." };
   }
 
+  if (apifyToken) {
+    return searchWithApify(query);
+  }
+
   const adapters = [
     ["wb", () => searchWildberries(query)],
     ["yandex", () => searchYandexMarket(query)],
@@ -88,6 +95,142 @@ async function searchAll(query) {
     suggestions: buildSuggestions(query, ranked),
     note: buildNote(statuses, ranked)
   };
+}
+
+async function searchWithApify(query) {
+  const started = await apifyRequest(`/v2/acts/${encodeURIComponentActorId(apifyActorId)}/runs?waitForFinish=${Math.ceil(apifyTimeoutMs / 1000)}`, {
+    method: "POST",
+    body: JSON.stringify(buildApifyInput(query))
+  });
+  const run = started.data || started;
+  const runId = run.id;
+
+  if (!runId) {
+    return {
+      results: [],
+      winner: null,
+      statuses: [{ marketplace: "apify", ok: false, message: "Apify не вернул ID запуска." }],
+      suggestions: [],
+      note: "Apify не вернул ID запуска."
+    };
+  }
+
+  const finishedRun = await waitForApifyRun(runId);
+  if (finishedRun.status !== "SUCCEEDED") {
+    return {
+      results: [],
+      winner: null,
+      statuses: [{ marketplace: "apify", ok: false, message: `Apify run завершился со статусом ${finishedRun.status}.` }],
+      suggestions: [],
+      note: `Apify run завершился со статусом ${finishedRun.status}.`
+    };
+  }
+
+  const items = await apifyRequest(`/v2/datasets/${finishedRun.defaultDatasetId}/items?clean=true&format=json`);
+  const rawItems = Array.isArray(items) ? items : [];
+  const results = rawItems.map(normalizeApifyItem).filter((item) => item.price && item.title);
+  const ranked = results
+    .map((item) => ({ ...item, score: similarityScore(query, item.title) }))
+    .sort((a, b) => b.score - a.score || a.price - b.price);
+  const confident = ranked.filter((item) => item.score >= 35);
+  const winner = (confident.length ? confident : ranked).filter((item) => item.price).sort((a, b) => a.price - b.price)[0] || null;
+
+  return {
+    results: ranked,
+    winner,
+    statuses: buildApifyStatuses(rawItems),
+    suggestions: buildSuggestions(query, ranked),
+    note: ranked.length
+      ? `Apify вернул ${ranked.length} товаров. Сравнение учитывает похожесть названия.`
+      : "Apify завершился, но товаров в dataset нет."
+  };
+}
+
+function buildApifyInput(query) {
+  return {
+    mode: "search",
+    marketplaces: ["ozon", "wildberries", "yandexmarket"],
+    searchKeywords: [query],
+    maxPagesPerQuery: Number(process.env.APIFY_MAX_PAGES || 1),
+    maxItemsPerQuery: Number(process.env.APIFY_MAX_ITEMS || 10)
+  };
+}
+
+async function waitForApifyRun(runId) {
+  const deadline = Date.now() + apifyTimeoutMs;
+  let run = await apifyRequest(`/v2/actor-runs/${runId}`);
+
+  while (["READY", "RUNNING"].includes(run.data?.status || run.status) && Date.now() < deadline) {
+    await delay(2500);
+    run = await apifyRequest(`/v2/actor-runs/${runId}`);
+  }
+
+  return run.data || run;
+}
+
+async function apifyRequest(pathname, options = {}) {
+  const response = await fetch(`https://api.apify.com${pathname}`, {
+    ...options,
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${apifyToken}`,
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Apify ${response.status}: ${text.slice(0, 240)}`);
+  }
+
+  return response.json();
+}
+
+function normalizeApifyItem(item) {
+  const marketplace = normalizeMarketplace(item.platform || item.marketplace);
+
+  return {
+    marketplace,
+    marketplaceName: marketplaces[marketplace]?.name || item.platform || "Marketplace",
+    title: cleanTitle(item.title || item.name || ""),
+    price: Number(item.price || item.currentPrice || item.priceValue || 0),
+    url: item.url || item.link || marketplaces[marketplace]?.searchUrl(item.query || "") || "",
+    source: "apify",
+    externalId: item.id || item.productId || "",
+    scrapedAt: item.scrapedAt || ""
+  };
+}
+
+function normalizeMarketplace(value) {
+  const key = String(value || "").toLowerCase();
+  if (key === "wildberries" || key === "wb") return "wb";
+  if (key === "yandexmarket" || key === "yandex_market" || key === "yandex") return "yandex";
+  if (key === "ozon") return "ozon";
+  return key || "unknown";
+}
+
+function buildApifyStatuses(rawItems) {
+  const counts = rawItems.reduce((acc, item) => {
+    const marketplace = normalizeMarketplace(item.platform || item.marketplace);
+    acc[marketplace] = (acc[marketplace] || 0) + 1;
+    return acc;
+  }, {});
+
+  return ["ozon", "wb", "yandex"].map((marketplace) => ({
+    marketplace,
+    ok: Boolean(counts[marketplace]),
+    message: counts[marketplace]
+      ? `Apify нашел ${counts[marketplace]} товаров.`
+      : "Apify не вернул товары по этой площадке."
+  }));
+}
+
+function encodeURIComponentActorId(actorId) {
+  return actorId.replace("/", "~");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function suggest(query) {
