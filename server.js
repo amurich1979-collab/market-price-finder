@@ -5,7 +5,7 @@ const path = require("path");
 const root = __dirname;
 const port = Number(process.env.PORT || 5177);
 const apifyToken = process.env.APIFY_TOKEN || "";
-const apifyActorId = process.env.APIFY_ACTOR_ID || "isolovyev/ru-marketplaces-price-monitor";
+const apifyActorId = resolveApifyActorId(process.env.APIFY_ACTOR_ID);
 const apifyTimeoutMs = Number(process.env.APIFY_TIMEOUT_MS || 120000);
 
 const marketplaces = {
@@ -68,9 +68,24 @@ async function searchAll(query) {
   }
 
   if (apifyToken) {
-    return searchWithApify(query);
+    try {
+      return await searchWithApify(query);
+    } catch (error) {
+      const fallback = await searchDirect(query);
+      fallback.statuses.unshift({
+        marketplace: "apify",
+        ok: false,
+        message: `Apify недоступен: ${error.message}`
+      });
+      fallback.note = `Apify недоступен, показан запасной поиск. ${fallback.note}`;
+      return fallback;
+    }
   }
 
+  return searchDirect(query);
+}
+
+async function searchDirect(query) {
   const adapters = [
     ["wb", () => searchWildberries(query)],
     ["yandex", () => searchYandexMarket(query)],
@@ -105,6 +120,15 @@ async function searchAll(query) {
     suggestions: buildSuggestions(query, ranked),
     note: buildNote(statuses, ranked)
   };
+}
+
+function resolveApifyActorId(value) {
+  const fallback = "isolovyev/ru-marketplaces-price-monitor";
+  const candidate = String(value || "").trim();
+
+  if (!candidate) return fallback;
+  if (candidate.includes("price-monitor-ozon-wildberries-yandex-market-avito")) return fallback;
+  return candidate;
 }
 
 async function searchWithApify(query) {
