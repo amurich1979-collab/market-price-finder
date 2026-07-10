@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: market-price-finder
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production

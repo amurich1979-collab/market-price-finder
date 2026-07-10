@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Маркет-минимум</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="search-panel" aria-label="Поиск низкой цены">
+        <div class="brand-row">
+          <img src="./assets/marketplaces.svg" alt="" class="brand-mark" />
+          <div>
+            <p class="eyebrow">Ozon · Wildberries · Яндекс Маркет</p>
+            <h1>Маркет-минимум</h1>
+          </div>
+        </div>
+
+        <form id="searchForm" class="search-form">
+          <label for="query">Что ищем</label>
+          <div class="search-line">
+            <input
+              id="query"
+              name="query"
+              autocomplete="off"
+              list="suggestions"
+              placeholder="Например: iPhone 15 128GB"
+              value="полетный контроллер f722"
+            />
+            <datalist id="suggestions"></datalist>
+            <button type="submit" aria-label="Найти цены">
+              <span aria-hidden="true">⌕</span>
+              Найти
+            </button>
+          </div>
+        </form>
+
+        <div class="controls">
+          <label class="switch">
+            <input id="demoMode" type="checkbox" />
+            <span>Тестовый демо-режим</span>
+          </label>
+          <button id="clearManual" class="ghost" type="button">Очистить ручные цены</button>
+        </div>
+        <div class="history-panel">
+          <p>История поиска</p>
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </section>
+
+      <section class="result-band" aria-live="polite">
+        <div id="status" class="status">Введите товар и нажмите «Найти».</div>
+        <div id="demoWarning" class="demo-warning" hidden>
+          Сейчас включены тестовые демо-цены. Если пользователь нашел цену ниже, добавьте ее через кнопку в карточке.
+        </div>
+        <div id="winner" class="winner" hidden></div>
+        <div id="cards" class="cards"></div>
+        <div id="matches" class="matches"></div>
+      </section>
+
+      <section class="manual-panel" aria-label="Ручной ввод цены">
+        <div>
+          <h2>Если сайт не отдал цену автоматически</h2>
+          <p>
+            Откройте поиск на маркетплейсе, скопируйте минимальную цену и вставьте ее сюда.
+            Приложение пересчитает победителя.
+          </p>
+        </div>
+        <form id="manualForm" class="manual-form">
+          <select id="manualMarketplace" aria-label="Маркетплейс">
+            <option value="ozon">Ozon</option>
+            <option value="wb">Wildberries</option>
+            <option value="yandex">Яндекс Маркет</option>
+          </select>
+          <input id="manualTitle" placeholder="Название товара" />
+          <input id="manualPrice" inputmode="numeric" placeholder="Цена, ₽" />
+          <button type="submit">Добавить</button>
+        </form>
+      </section>
+    </main>
+
+    <template id="marketCardTemplate">
+      <article class="market-card">
+        <div class="market-head">
+          <div>
+            <p class="market-name"></p>
+            <h3 class="item-title"></h3>
+          </div>
+          <span class="badge"></span>
+        </div>
+        <p class="price"></p>
+        <p class="meta"></p>
+        <div class="actions">
+          <a class="open-link" target="_blank" rel="noreferrer">Открыть поиск</a>
+          <button class="report-lower" type="button">Указать цену ниже</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

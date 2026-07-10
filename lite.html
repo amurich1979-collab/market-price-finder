@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Маркет-минимум Lite</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #172026;
+        background: #f4f7f8;
+      }
+      main {
+        width: min(980px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 20px 0;
+      }
+      section, article {
+        background: #fff;
+        border: 1px solid #d9e0e5;
+        border-radius: 8px;
+        padding: 16px;
+      }
+      h1 { margin: 0 0 16px; font-size: 36px; }
+      label { display: block; margin: 12px 0 6px; font-weight: 700; }
+      input, select, button {
+        min-height: 44px;
+        border-radius: 8px;
+        font: inherit;
+      }
+      input, select {
+        width: 100%;
+        border: 1px solid #d9e0e5;
+        padding: 0 12px;
+      }
+      button, a.button {
+        border: 0;
+        padding: 0 14px;
+        background: #0a7cff;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .controls input { width: auto; min-height: 18px; }
+      .note {
+        margin: 16px 0;
+        padding: 12px;
+        border-radius: 8px;
+        background: #fff6df;
+        color: #704400;
+        font-weight: 700;
+      }
+      .winner {
+        margin: 16px 0;
+        padding: 12px;
+        border-left: 5px solid #087f5b;
+        background: #e9f8f2;
+        font-weight: 700;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .best {
+        border-color: #087f5b;
+        outline: 3px solid rgba(8, 127, 91, 0.14);
+      }
+      .market { color: #60707c; font-weight: 700; }
+      .price { font-size: 28px; font-weight: 900; }
+      .muted { color: #60707c; }
+      .manual {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: 1fr 1.4fr 0.8fr auto;
+        gap: 10px;
+      }
+      @media (max-width: 760px) {
+        .row, .cards, .manual { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Маркет-минимум Lite</h1>
+        <form id="searchForm">
+          <label for="query">Что ищем</label>
+          <div class="row">
+            <input id="query" value="полетный контроллер f 722 fpv" />
+            <button type="submit">Найти</button>
+          </div>
+        </form>
+        <div class="controls">
+          <label><input id="demoMode" type="checkbox" checked /> Демо-цены</label>
+          <button id="clearManual" type="button">Очистить ручные цены</button>
+        </div>
+      </section>
+
+      <div id="note" class="note"></div>
+      <div id="winner" class="winner"></div>
+      <div id="cards" class="cards"></div>
+
+      <section style="margin-top:16px">
+        <h2>Пользователь нашел цену ниже</h2>
+        <form id="manualForm" class="manual">
+          <select id="manualMarketplace">
+            <option value="ozon">Ozon</option>
+            <option value="wb">Wildberries</option>
+            <option value="yandex">Яндекс Маркет</option>
+          </select>
+          <input id="manualTitle" placeholder="Название товара" />
+          <input id="manualPrice" inputmode="numeric" placeholder="Цена, ₽" />
+          <button type="submit">Добавить</button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const marketplaces = {
+        ozon: { name: "Ozon", url: q => "https://www.ozon.ru/search/?text=" + encodeURIComponent(q) },
+        wb: { name: "Wildberries", url: q => "https://www.wildberries.ru/catalog/0/search.aspx?search=" + encodeURIComponent(q) },
+        yandex: { name: "Яндекс Маркет", url: q => "https://market.yandex.ru/search?text=" + encodeURIComponent(q) }
+      };
+      const els = {
+        searchForm: document.getElementById("searchForm"),
+        query: document.getElementById("query"),
+        demoMode: document.getElementById("demoMode"),
+        clearManual: document.getElementById("clearManual"),
+        note: document.getElementById("note"),
+        winner: document.getElementById("winner"),
+        cards: document.getElementById("cards"),
+        manualForm: document.getElementById("manualForm"),
+        manualMarketplace: document.getElementById("manualMarketplace"),
+        manualTitle: document.getElementById("manualTitle"),
+        manualPrice: document.getElementById("manualPrice")
+      };
+      const state = {
+        query: els.query.value,
+        manual: JSON.parse(localStorage.getItem("manualPricesLite") || "[]"),
+        results: []
+      };
+
+      els.searchForm.addEventListener("submit", event => {
+        event.preventDefault();
+        state.query = els.query.value.trim();
+        search();
+      });
+      els.demoMode.addEventListener("change", search);
+      els.clearManual.addEventListener("click", () => {
+        state.manual = [];
+        localStorage.removeItem("manualPricesLite");
+        render();
+      });
+      els.manualForm.addEventListener("submit", event => {
+        event.preventDefault();
+        const price = Number(els.manualPrice.value.replace(/[^\d]/g, ""));
+        if (!price) return;
+        state.manual.push({
+          marketplace: els.manualMarketplace.value,
+          title: els.manualTitle.value || state.query,
+          query: state.query,
+          price,
+          source: "manual"
+        });
+        localStorage.setItem("manualPricesLite", JSON.stringify(state.manual));
+        els.manualPrice.value = "";
+        els.manualTitle.value = "";
+        render();
+      });
+
+      async function search() {
+        if (els.demoMode.checked) {
+          state.results = [
+            { marketplace: "ozon", title: state.query + " на Ozon", price: 12990, source: "demo" },
+            { marketplace: "wb", title: state.query + " на Wildberries", price: 12470, source: "demo" },
+            { marketplace: "yandex", title: state.query + " на Яндекс Маркете", price: 13180, source: "demo" }
+          ];
+          render();
+          return;
+        }
+        els.note.textContent = "Ищу live-цены...";
+        try {
+          const response = await fetch("/api/search?q=" + encodeURIComponent(state.query));
+          const payload = await response.json();
+          state.results = payload.results || [];
+          els.note.textContent = payload.note || "Готово.";
+        } catch {
+          els.note.textContent = "Live-API недоступен. Можно добавить найденную цену вручную.";
+        }
+        render();
+      }
+
+      function render() {
+        if (els.demoMode.checked) {
+          els.note.textContent = "Сейчас включены тестовые демо-цены. Реальную цену ниже добавьте вручную.";
+        }
+        const manual = state.manual.filter(item => item.query === state.query);
+        const byMarket = new Map();
+        [...state.results, ...manual].forEach(item => {
+          const old = byMarket.get(item.marketplace);
+          if (!old || item.price < old.price) byMarket.set(item.marketplace, item);
+        });
+        const complete = Object.keys(marketplaces).map(key => byMarket.get(key) || {
+          marketplace: key,
+          title: "Цена пока не получена",
+          price: 0,
+          source: "empty"
+        });
+        const winner = complete.filter(item => item.price).sort((a, b) => a.price - b.price)[0];
+        els.winner.textContent = winner ? "Самая низкая цена: " + rub(winner.price) + " — " + marketplaces[winner.marketplace].name : "Цен пока нет.";
+        els.cards.innerHTML = "";
+        complete.forEach(item => {
+          const card = document.createElement("article");
+          if (winner && item.marketplace === winner.marketplace) card.className = "best";
+          card.innerHTML = `
+            <div class="market">${marketplaces[item.marketplace].name} · ${label(item.source)}</div>
+            <h3>${escapeHtml(item.title)}</h3>
+            <p class="price">${item.price ? rub(item.price) : "Нет цены"}</p>
+            <p class="muted">${item.source === "manual" ? "Цена добавлена вручную." : "Если нашли дешевле, добавьте цену ниже."}</p>
+            <a class="button" target="_blank" rel="noreferrer" href="${marketplaces[item.marketplace].url(state.query)}">Открыть поиск</a>
+          `;
+          els.cards.appendChild(card);
+        });
+      }
+
+      function rub(value) {
+        return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(value);
+      }
+      function label(source) {
+        return { demo: "демо", manual: "вручную", live: "live", empty: "нет" }[source] || source;
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+      }
+      search();
+    </script>
+  </body>
+</html>

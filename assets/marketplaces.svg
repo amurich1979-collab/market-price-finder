@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="152" height="152" viewBox="0 0 152 152" role="img" aria-label="Маркетплейсы">
+  <rect width="152" height="152" rx="26" fill="#ffffff"/>
+  <circle cx="52" cy="54" r="34" fill="#0A7CFF"/>
+  <circle cx="96" cy="54" r="34" fill="#B72CF4" fill-opacity=".9"/>
+  <circle cx="76" cy="96" r="34" fill="#FFCC00" fill-opacity=".95"/>
+  <path d="M49 61c7 7 18 7 25 0M86 61c7 7 18 7 25 0" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+  <path d="M63 96h26M76 83v26" fill="none" stroke="#172026" stroke-width="8" stroke-linecap="round"/>
+</svg>
