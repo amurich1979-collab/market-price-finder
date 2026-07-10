@@ -18,4 +18,4 @@ services:
       - key: APIFY_MAX_ITEMS
         value: "10"
       - key: APIFY_TIMEOUT_MS
-        value: "120000"
+        value: "35000"

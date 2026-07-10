@@ -6,7 +6,7 @@ const root = __dirname;
 const port = Number(process.env.PORT || 5177);
 const apifyToken = process.env.APIFY_TOKEN || "";
 const apifyActorId = resolveApifyActorId(process.env.APIFY_ACTOR_ID);
-const apifyTimeoutMs = Number(process.env.APIFY_TIMEOUT_MS || 120000);
+const apifyTimeoutMs = Math.min(Number(process.env.APIFY_TIMEOUT_MS || 35000), 45000);
 
 const marketplaces = {
   ozon: {
@@ -151,13 +151,7 @@ async function searchWithApify(query) {
 
   const finishedRun = await waitForApifyRun(runId);
   if (finishedRun.status !== "SUCCEEDED") {
-    return {
-      results: [],
-      winner: null,
-      statuses: [{ marketplace: "apify", ok: false, message: `Apify run завершился со статусом ${finishedRun.status}.` }],
-      suggestions: [],
-      note: `Apify run завершился со статусом ${finishedRun.status}.`
-    };
+    throw new Error(`Apify run не успел завершиться: ${finishedRun.status}.`);
   }
 
   const items = await apifyRequest(`/v2/datasets/${finishedRun.defaultDatasetId}/items?clean=true&format=json`);
