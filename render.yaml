@@ -13,9 +13,19 @@ services:
         sync: false
       - key: APIFY_ACTOR_ID
         value: isolovyev/ru-marketplaces-price-monitor
+      - key: OZON_ACTOR_ID
+        sync: false
+      - key: YANDEX_ACTOR_ID
+        sync: false
       - key: APIFY_MAX_PAGES
         value: "1"
       - key: APIFY_MAX_ITEMS
-        value: "10"
+        value: "50"
       - key: APIFY_TIMEOUT_MS
         value: "35000"
+      - key: OZON_TIMEOUT_MS
+        value: "35000"
+      - key: WB_TIMEOUT_MS
+        value: "12000"
+      - key: YANDEX_TIMEOUT_MS
+        value: "16000"
