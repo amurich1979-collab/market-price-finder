@@ -4,7 +4,7 @@ const MARKETPLACE = "ozon";
 
 async function fetchOzon(query, options = {}) {
   const timeoutMs = Number(options.timeoutMs || process.env.OZON_TIMEOUT_MS || 35000);
-  const actorId = options.actorId || process.env.OZON_ACTOR_ID;
+  const actorId = options.actorId || process.env.OZON_ACTOR_ID || process.env.APIFY_ACTOR_ID;
   const token = options.token || process.env.APIFY_TOKEN;
 
   const raw = await runActor({

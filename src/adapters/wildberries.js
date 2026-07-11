@@ -1,4 +1,5 @@
 const { cleanTitle, nowIso, parsePrice, uniqueBy, withTimeout } = require("../utils");
+const { normalizeApifyProduct, runActor } = require("../apify");
 
 const MARKETPLACE = "wb";
 
@@ -6,6 +7,7 @@ async function fetchWildberries(query, options = {}) {
   const timeoutMs = Number(options.timeoutMs || process.env.WB_TIMEOUT_MS || 12000);
   const candidates = [];
   const versions = ["v14", "v13"];
+  let lastError = null;
 
   for (const version of versions) {
     const endpoint = buildEndpoint(version, query);
@@ -27,13 +29,48 @@ async function fetchWildberries(query, options = {}) {
       candidates.push(...products.map(normalizeWildberriesProduct).filter((item) => item.price));
       if (candidates.length >= 50) break;
     } catch (error) {
+      lastError = error;
       if (version === versions[versions.length - 1] && candidates.length === 0) {
-        throw error;
+        return fetchWildberriesFromApify(query, options).catch(() => {
+          throw lastError;
+        });
       }
     }
   }
 
   return uniqueBy(candidates, (item) => item.productId).slice(0, 80);
+}
+
+async function fetchWildberriesFromApify(query, options = {}) {
+  const actorId = options.actorId || process.env.WB_ACTOR_ID || process.env.APIFY_ACTOR_ID;
+  const token = options.token || process.env.APIFY_TOKEN;
+
+  if (!actorId || !token) {
+    throw new Error("WB public endpoint failed and WB Apify fallback is not configured.");
+  }
+
+  const raw = await runActor({
+    actorId,
+    token,
+    timeoutMs: Number(process.env.WB_ACTOR_TIMEOUT_MS || 35000),
+    marketplace: MARKETPLACE,
+    input: {
+      mode: "search",
+      platforms: ["wildberries"],
+      queries: [query],
+      maxPagesPerQuery: Number(process.env.WB_MAX_PAGES || 1),
+      maxItemsPerQuery: Number(process.env.WB_MAX_ITEMS || process.env.APIFY_MAX_ITEMS || 50),
+      alertOnly: true,
+      flagUnderpriced: false,
+      proxyConfiguration: {
+        useApifyProxy: true,
+        apifyProxyGroups: ["RESIDENTIAL"],
+        apifyProxyCountry: "RU"
+      }
+    }
+  });
+
+  return raw.map((item) => normalizeApifyProduct(item, MARKETPLACE)).filter((item) => item.price);
 }
 
 function buildEndpoint(version, query) {
@@ -100,6 +137,7 @@ function buildImageUrl(productId) {
 }
 
 module.exports = {
+  fetchWildberriesFromApify,
   fetchWildberries,
   normalizeWildberriesProduct
 };
