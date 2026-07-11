@@ -24,7 +24,6 @@ const els = {
   query: document.querySelector("#query"),
   suggestions: document.querySelector("#suggestions"),
   status: document.querySelector("#status"),
-  winner: document.querySelector("#winner"),
   cards: document.querySelector("#cards"),
   matches: document.querySelector("#matches"),
   historyList: document.querySelector("#historyList"),
@@ -37,7 +36,6 @@ const els = {
 els.demoMode.closest(".switch").hidden = true;
 els.clearManual.hidden = true;
 els.manualForm.closest(".manual-panel").hidden = true;
-els.winner.hidden = true;
 els.demoWarning.hidden = true;
 
 els.form.addEventListener("submit", async (event) => {
