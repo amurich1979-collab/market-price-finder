@@ -223,8 +223,8 @@ button,
 }
 
 .market-section {
-  min-height: 260px;
-  padding: 18px;
+  min-height: 220px;
+  padding: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -239,27 +239,27 @@ button,
 
 .market-section h2 {
   margin-bottom: 0;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .product-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .product-card {
-  min-height: 210px;
+  min-height: 158px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 14px;
+  padding: 10px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
 .product-card.empty {
-  min-height: 160px;
+  min-height: 132px;
 }
 
 .product-card.best {
@@ -269,9 +269,9 @@ button,
 
 .product-image {
   width: 100%;
-  height: 150px;
+  height: 86px;
   object-fit: contain;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   background: #f7fafb;
   border-radius: 8px;
 }
@@ -290,10 +290,21 @@ button,
 }
 
 .item-title {
-  min-height: 56px;
-  margin-bottom: 12px;
-  font-size: 18px;
-  line-height: 1.25;
+  min-height: 40px;
+  margin-bottom: 8px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.product-card h3 {
+  display: -webkit-box;
+  min-height: auto;
+  margin-bottom: 8px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 15px;
+  line-height: 1.22;
 }
 
 .badge {
@@ -308,22 +319,29 @@ button,
 }
 
 .price {
-  margin-bottom: 8px;
-  font-size: 30px;
+  margin-bottom: 6px;
+  font-size: 23px;
   font-weight: 900;
 }
 
 .old-price {
-  margin-top: -6px;
-  margin-bottom: 8px;
+  margin-top: -4px;
+  margin-bottom: 6px;
   color: var(--muted);
   text-decoration: line-through;
 }
 
 .meta {
-  min-height: 44px;
+  min-height: 32px;
   color: var(--muted);
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.product-card .open-link {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
 }
 
 .actions {
