@@ -26,7 +26,8 @@ const STOPWORDS = new Set([
   "белый"
 ]);
 
-function relevance(query, product) {
+function relevance(query, product, options = {}) {
+  const minTokenOverlap = options.minTokenOverlap || 0.72;
   const title = typeof product === "string" ? product : product?.title;
   const queryNorm = normalizeText(query);
   const titleNorm = normalizeText(title);
@@ -50,17 +51,17 @@ function relevance(query, product) {
   if (!modifierCheck.ok) return modifierCheck;
 
   const overlap = tokenOverlap(queryTokens, titleTokens);
-  if (overlap < 0.72) {
+  if (overlap < minTokenOverlap) {
     return { ok: false, score: Math.round(overlap * 100), reason: "low_token_overlap" };
   }
 
   return { ok: true, score: Math.round(overlap * 100), reason: "matched" };
 }
 
-function filterRelevant(query, items) {
+function filterRelevant(query, items, options = {}) {
   return items
     .map((item) => {
-      const result = relevance(query, item);
+      const result = relevance(query, item, options);
       return { ...item, relevance: result };
     })
     .filter((item) => item.relevance.ok);

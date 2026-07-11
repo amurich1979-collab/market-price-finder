@@ -5,6 +5,7 @@ const { createEmptyMarketplace, logDiagnostic, nowIso, uniqueBy, withTimeout } =
 const { filterRelevant } = require("./relevance");
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const PARTIAL_CACHE_TTL_MS = 2 * 60 * 1000;
 const cache = new Map();
 const inflight = new Map();
 
@@ -50,23 +51,24 @@ async function runSearch(query) {
 
       try {
         const candidates = await withTimeout(() => adapter(), timeoutMs, `${marketplace} adapter`);
-        const relevant = filterRelevant(query, dedupeProducts(candidates))
-          .sort((a, b) => a.price - b.price)
-          .slice(0, 3)
-          .map(({ relevance, ...item }) => ({ ...item, relevanceScore: relevance.score }));
+        const selected = selectRelevant(query, dedupeProducts(candidates));
+        const relevant = selected.items;
+        const adapterDebug = buildAdapterDebug(marketplace, candidates, selected, Date.now() - adapterStarted);
 
         logDiagnostic("adapter.complete", {
           marketplace,
           durationMs: Date.now() - adapterStarted,
           candidates: candidates.length,
-          relevant: relevant.length,
-          cacheHit: false
+          relevant: selected.relevantItems,
+          cacheHit: false,
+          ...(marketplace === "ozon" || marketplace === "wb" ? adapterDebug : {})
         });
 
         return [marketplace, {
           status: relevant.length ? "ok" : "empty",
           message: relevant.length ? `Найдено ${relevant.length} релевантных товаров.` : "Релевантные товары не найдены.",
-          items: relevant
+          items: relevant,
+          _debug: adapterDebug
         }];
       } catch (error) {
         logDiagnostic("adapter.error", {
@@ -81,7 +83,11 @@ async function runSearch(query) {
         return [marketplace, {
           status: "error",
           message: error.message || "Источник не ответил.",
-          items: []
+          items: [],
+          _debug: {
+            durationMs: Date.now() - adapterStarted,
+            error: error.message
+          }
         }];
       }
     })
@@ -98,7 +104,11 @@ async function runSearch(query) {
   }
 
   const response = createResponse(query, marketplaces);
-  cache.set(query.toLowerCase(), { value: response, expiresAt: Date.now() + CACHE_TTL_MS });
+  attachDebug(response, marketplaces);
+  const ttl = cacheTtlFor(Object.values(marketplaces));
+  if (ttl > 0) {
+    cache.set(query.toLowerCase(), { value: response, expiresAt: Date.now() + ttl });
+  }
   logDiagnostic("search.complete", { query, durationMs: Date.now() - started, cacheHit: false });
   return response;
 }
@@ -116,9 +126,77 @@ function dedupeProducts(items) {
 }
 
 function timeoutFor(marketplace) {
-  const defaults = { ozon: 35000, wb: 12000, yandex: 16000 };
+  const defaults = { ozon: 90000, wb: 20000, yandex: 16000 };
   const envKey = `${marketplace.toUpperCase()}_TIMEOUT_MS`;
   return Number(process.env[envKey] || defaults[marketplace] || 15000);
+}
+
+function selectRelevant(query, candidates) {
+  const strict = filterRelevant(query, candidates, { minTokenOverlap: 0.72 });
+  const pool = strict.length >= 3
+    ? strict
+    : uniqueBy([...strict, ...filterRelevant(query, candidates, { minTokenOverlap: 0.55 })], (item) => item.url || item.productId || `${item.title}:${item.price}`);
+  const sorted = pool.sort((a, b) => a.price - b.price);
+
+  return {
+    relevantItems: sorted.length,
+    items: sorted
+      .slice(0, 3)
+      .map(({ relevance, ...item }) => ({ ...item, relevanceScore: relevance.score }))
+  };
+}
+
+function cacheTtlFor(results) {
+  const hasItems = results.some((result) => result.items?.length);
+  const hasError = results.some((result) => result.status === "error");
+  const allError = results.every((result) => result.status === "error");
+
+  if (allError) return 0;
+  if (!hasItems || hasError) return PARTIAL_CACHE_TTL_MS;
+  return CACHE_TTL_MS;
+}
+
+function buildAdapterDebug(marketplace, candidates, selected, durationMs) {
+  const diagnostics = candidates._diagnostics || {};
+  const base = {
+    durationMs,
+    rawItems: diagnostics.rawItems ?? candidates.length,
+    normalizedItems: diagnostics.normalizedItems ?? candidates.length,
+    relevantItems: selected.relevantItems
+  };
+
+  if (marketplace === "ozon") {
+    return {
+      actorId: diagnostics.actorId,
+      runStatus: diagnostics.runStatus,
+      defaultDatasetId: diagnostics.defaultDatasetId,
+      firstItemKeys: diagnostics.firstItemKeys,
+      droppedIncomplete: diagnostics.droppedIncomplete,
+      ...base
+    };
+  }
+
+  if (marketplace === "wb") {
+    return {
+      requestedPages: diagnostics.requestedPages,
+      ...base
+    };
+  }
+
+  return base;
+}
+
+function attachDebug(response, marketplaces) {
+  if (process.env.DEBUG_SEARCH !== "true") {
+    for (const result of Object.values(marketplaces)) delete result._debug;
+    return;
+  }
+
+  response.debug = {
+    ozon: marketplaces.ozon._debug,
+    wb: marketplaces.wb._debug
+  };
+  for (const result of Object.values(marketplaces)) delete result._debug;
 }
 
 function clearCache() {
@@ -127,6 +205,8 @@ function clearCache() {
 }
 
 module.exports = {
+  cacheTtlFor,
   clearCache,
+  selectRelevant,
   searchMarketplaces
 };

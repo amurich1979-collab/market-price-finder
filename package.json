@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test",
     "check": "node --check server.js && node --check app.js && node --test"
   },
   "engines": {

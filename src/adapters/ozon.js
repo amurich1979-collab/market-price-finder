@@ -3,7 +3,7 @@ const { normalizeApifyProduct, runActor } = require("../apify");
 const MARKETPLACE = "ozon";
 
 async function fetchOzon(query, options = {}) {
-  const timeoutMs = Number(options.timeoutMs || process.env.OZON_TIMEOUT_MS || 35000);
+  const timeoutMs = Number(options.timeoutMs || process.env.OZON_TIMEOUT_MS || 90000);
   const actorId = options.actorId || process.env.OZON_ACTOR_ID || process.env.APIFY_ACTOR_ID;
   const token = options.token || process.env.APIFY_TOKEN;
 
@@ -15,9 +15,22 @@ async function fetchOzon(query, options = {}) {
     input: buildOzonInput(query)
   });
 
-  return raw
+  const normalized = raw
     .map((item) => normalizeApifyProduct(item, MARKETPLACE))
-    .filter((item) => item.url && !isSearchUrl(item.url));
+    .filter((item) => !isSearchUrl(item.url));
+  const items = normalized.filter((item) => item.title && item.price && item.url);
+  const droppedIncomplete = normalized.length - items.length;
+
+  Object.defineProperty(items, "_diagnostics", {
+    enumerable: false,
+    value: {
+      ...(raw._diagnostics || {}),
+      normalizedItems: normalized.length,
+      droppedIncomplete
+    }
+  });
+
+  return items;
 }
 
 function buildOzonInput(query) {
@@ -27,7 +40,7 @@ function buildOzonInput(query) {
     queries: [query],
     maxPagesPerQuery: Number(process.env.OZON_MAX_PAGES || process.env.APIFY_MAX_PAGES || 1),
     maxItemsPerQuery: Number(process.env.OZON_MAX_ITEMS || process.env.APIFY_MAX_ITEMS || 50),
-    alertOnly: true,
+    alertOnly: false,
     flagUnderpriced: false,
     proxyConfiguration: {
       useApifyProxy: true,
@@ -42,5 +55,7 @@ function isSearchUrl(url) {
 }
 
 module.exports = {
-  fetchOzon
+  buildOzonInput,
+  fetchOzon,
+  isSearchUrl
 };

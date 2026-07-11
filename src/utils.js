@@ -107,10 +107,19 @@ function parsePrice(value) {
 
 function withTimeout(promiseFactory, timeoutMs, label) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${timeoutMs}ms`);
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
 
-  return Promise.resolve()
-    .then(() => promiseFactory(controller.signal))
+  return Promise.race([
+    Promise.resolve().then(() => promiseFactory(controller.signal)),
+    timeout
+  ])
     .finally(() => clearTimeout(timer));
 }
 

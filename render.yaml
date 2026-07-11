@@ -26,9 +26,9 @@ services:
       - key: APIFY_TIMEOUT_MS
         value: "35000"
       - key: OZON_TIMEOUT_MS
-        value: "35000"
+        value: "90000"
       - key: WB_TIMEOUT_MS
-        value: "12000"
+        value: "20000"
       - key: WB_ACTOR_TIMEOUT_MS
         value: "35000"
       - key: YANDEX_TIMEOUT_MS
