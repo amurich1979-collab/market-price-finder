@@ -24,6 +24,7 @@ const els = {
   query: document.querySelector("#query"),
   suggestions: document.querySelector("#suggestions"),
   status: document.querySelector("#status"),
+  progress: document.querySelector("#progress"),
   cards: document.querySelector("#cards"),
   matches: document.querySelector("#matches"),
   historyList: document.querySelector("#historyList"),
@@ -58,6 +59,7 @@ async function search(query) {
   els.query.value = query;
   rememberSearch(query);
   els.status.textContent = "Ищу товары на Ozon, Wildberries и Яндекс Маркете...";
+  setLoading(true);
   renderSkeleton();
 
   try {
@@ -68,6 +70,8 @@ async function search(query) {
     render(payload);
   } catch {
     els.status.textContent = "Не удалось обратиться к API поиска.";
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -80,6 +84,12 @@ function renderSkeleton() {
     }))
   );
   els.matches.replaceChildren();
+}
+
+function setLoading(isLoading) {
+  els.progress.hidden = !isLoading;
+  els.form.querySelector("button[type='submit']").disabled = isLoading;
+  els.query.disabled = isLoading;
 }
 
 function render(payload) {
@@ -105,6 +115,22 @@ function createSection(marketplace, result = { status: "error", message: "Нет
 
   const list = document.createElement("div");
   list.className = "product-list";
+
+  if (result.status === "loading") {
+    for (let index = 0; index < 3; index += 1) {
+      const skeleton = document.createElement("article");
+      skeleton.className = "product-card skeleton";
+      skeleton.innerHTML = `
+        <div class="skeleton-image"></div>
+        <div class="skeleton-line wide"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line short"></div>
+      `;
+      list.appendChild(skeleton);
+    }
+    section.appendChild(list);
+    return section;
+  }
 
   if (result.items?.length) {
     result.items.forEach((item) => list.appendChild(createProductCard(item)));
