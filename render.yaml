@@ -30,6 +30,6 @@ services:
       - key: WB_TIMEOUT_MS
         value: "20000"
       - key: WB_ACTOR_TIMEOUT_MS
-        value: "35000"
+        value: "90000"
       - key: YANDEX_TIMEOUT_MS
         value: "16000"

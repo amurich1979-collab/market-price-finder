@@ -1,6 +1,10 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { loadEnvFile } = require("./src/env");
+
+loadEnvFile();
+
 const { searchMarketplaces } = require("./src/search");
 
 const root = __dirname;
@@ -44,6 +48,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/lite.html") {
+    redirect(res, "/index.html");
+    return;
+  }
+
   serveStatic(url.pathname, res);
 });
 
@@ -75,4 +84,9 @@ function serveStatic(pathname, res) {
 function sendJson(res, payload, status = 200) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function redirect(res, location) {
+  res.writeHead(302, { location });
+  res.end();
 }

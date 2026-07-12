@@ -74,7 +74,7 @@ async function fetchWildberriesFromApify(query, options = {}) {
       queries: [query],
       maxPagesPerQuery: Number(process.env.WB_MAX_PAGES || 1),
       maxItemsPerQuery: Number(process.env.WB_MAX_ITEMS || process.env.APIFY_MAX_ITEMS || 50),
-      alertOnly: true,
+      alertOnly: false,
       flagUnderpriced: false,
       proxyConfiguration: {
         useApifyProxy: true,

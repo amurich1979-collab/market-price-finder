@@ -4,8 +4,11 @@
 
 ## Запуск
 
+Сначала при необходимости создайте локальный `.env` из `.env.example` и заполните `APIFY_TOKEN`.
+Файл `.env` подхватывается автоматически при старте сервера.
+
 ```powershell
-node .\server.js
+npm start
 ```
 
 После запуска откройте:
@@ -13,6 +16,9 @@ node .\server.js
 ```text
 http://localhost:5177
 ```
+
+Не открывайте `index.html` или `lite.html` через `file://`: API поиска работает только через HTTP-сервер.
+Старый адрес `/lite.html` теперь автоматически перенаправляет на актуальный интерфейс.
 
 ## Деплой на Render
 
@@ -37,8 +43,8 @@ npm start
 - Live-режим включен по умолчанию.
 - Если задан `APIFY_TOKEN`, backend использует Apify actor как основной источник данных.
 - Яндекс Маркет парсится из страницы поиска и обычно отдает настоящие цены.
-- Wildberries проверяется через публичный каталог, но может временно отдавать 429 или пустую выдачу.
-- Ozon часто блокирует backend-запросы, поэтому для него приложение показывает статус и ссылку на поиск.
+- Wildberries проверяется через публичный каталог, а при 429 может использовать Apify fallback.
+- Ozon работает через Apify actor, потому что прямые backend-запросы к Ozon обычно блокируются.
 - История поиска хранится в браузере через `localStorage`.
 - Подсказки строятся из найденных товарных названий и помогают уточнить запрос.
 - Сравнение учитывает похожесть названия: товары с разными формулировками ранжируются по совпадению слов, артикулов и латинских/цифровых токенов.
@@ -51,10 +57,13 @@ npm start
 
 ```text
 APIFY_TOKEN=...
-APIFY_ACTOR_ID=amurich/price-monitor-ozon-wildberries-yandex-market-avito
-APIFY_MAX_PAGES=1
-APIFY_MAX_ITEMS=10
-APIFY_TIMEOUT_MS=120000
+APIFY_ACTOR_ID=isolovyev/ru-marketplaces-price-monitor
+OZON_ACTOR_ID=isolovyev/ru-marketplaces-price-monitor
+WB_ACTOR_ID=isolovyev/ru-marketplaces-price-monitor
+OZON_TIMEOUT_MS=90000
+WB_TIMEOUT_MS=20000
+WB_ACTOR_TIMEOUT_MS=90000
+APIFY_MAX_ITEMS=50
 ```
 
 Поддерживаемая схема результата actor'а:
