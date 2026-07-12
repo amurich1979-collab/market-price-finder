@@ -529,4 +529,63 @@ button,
     height: 62px;
     flex-basis: 62px;
   }
+
+  .market-section {
+    padding: 10px;
+  }
+
+  .market-section-head {
+    margin-bottom: 8px;
+  }
+
+  .product-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .product-card {
+    min-height: 136px;
+    padding: 7px;
+  }
+
+  .product-image,
+  .skeleton-image {
+    height: 52px;
+    margin-bottom: 5px;
+  }
+
+  .product-card h3 {
+    display: -webkit-box;
+    min-height: 44px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .price {
+    margin-bottom: 4px;
+    font-size: 17px;
+  }
+
+  .old-price,
+  .meta,
+  .caution {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .meta {
+    min-height: 24px;
+    max-height: 36px;
+    overflow: hidden;
+  }
+
+  .product-card .open-link {
+    min-height: 32px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
 }
