@@ -18,7 +18,7 @@ async function fetchOzon(query, options = {}) {
   const normalized = raw
     .map((item) => normalizeApifyProduct(item, MARKETPLACE))
     .filter((item) => !isSearchUrl(item.url));
-  const items = normalized.filter((item) => item.title && item.price && item.url);
+  const items = normalized.filter((item) => item.productId && item.title && item.price && item.url && (item.seller || item.offerId) && item.verified);
   const droppedIncomplete = normalized.length - items.length;
 
   Object.defineProperty(items, "_diagnostics", {

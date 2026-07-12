@@ -231,6 +231,16 @@ button,
   font-weight: 700;
 }
 
+.price-warning {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #d9e0e5;
+  border-radius: 8px;
+  background: #f7fafb;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .winner {
   margin: 12px 0 18px;
   padding: 16px 18px;
@@ -399,6 +409,13 @@ button,
   margin-bottom: 6px;
   color: var(--muted);
   text-decoration: line-through;
+}
+
+.caution {
+  margin: 6px 0;
+  color: #8a5a00;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .meta {

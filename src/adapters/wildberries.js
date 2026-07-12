@@ -1,19 +1,21 @@
-const { cleanTitle, nowIso, parsePrice, uniqueBy, withTimeout } = require("../utils");
+const { cleanTitle, nowIso, uniqueBy, withTimeout } = require("../utils");
 const { normalizeApifyProduct, runActor } = require("../apify");
 
 const MARKETPLACE = "wb";
+const PAGES = [1, 2, 3];
 
 async function fetchWildberries(query, options = {}) {
-  const timeoutMs = Number(options.timeoutMs || process.env.WB_TIMEOUT_MS || 20000);
+  const timeoutMs = Number(options.timeoutMs || process.env.WB_TIMEOUT_MS || 12000);
   const candidates = [];
   const versions = ["v14", "v13"];
   const requestedPages = [];
   let lastError = null;
 
   for (const version of versions) {
-    for (const page of [1, 2, 3]) {
+    for (const page of PAGES) {
       const endpoint = buildEndpoint(version, query, page);
       requestedPages.push(`${version}:${page}`);
+
       try {
         const data = await withTimeout(async (signal) => {
           const response = await fetch(endpoint, {
@@ -26,30 +28,35 @@ async function fetchWildberries(query, options = {}) {
           });
           if (!response.ok) throw new Error(`WB responded ${response.status}`);
           return response.json();
-        }, timeoutMs, "Wildberries search");
+        }, Math.min(timeoutMs, 5000), "Wildberries search page");
 
         const products = data?.data?.products || data?.products || [];
-        candidates.push(...products.map(normalizeWildberriesProduct).filter((item) => item.price));
-        if (uniqueBy(candidates, (item) => item.productId).length >= 100) break;
+        candidates.push(...products.flatMap(normalizeWildberriesProduct).filter((item) => item.price));
+        if (uniqueBy(candidates, offerKey).length >= 100) break;
       } catch (error) {
         lastError = error;
-        if (version === versions[versions.length - 1] && page === 3 && candidates.length === 0) {
+        if (version === versions[versions.length - 1] && page === PAGES[PAGES.length - 1] && candidates.length === 0) {
           return fetchWildberriesFromApify(query, options).catch(() => {
             throw lastError;
           });
         }
       }
     }
-    if (uniqueBy(candidates, (item) => item.productId).length >= 100) break;
+
+    if (uniqueBy(candidates, offerKey).length >= 100) break;
   }
 
-  const items = uniqueBy(candidates, (item) => item.productId).slice(0, 120);
+  const items = uniqueBy(candidates, offerKey).slice(0, 120);
   Object.defineProperty(items, "_diagnostics", {
     enumerable: false,
     value: {
       requestedPages,
-      rawItems: candidates.length,
-      normalizedItems: items.length
+      rawCandidates: candidates.length,
+      normalizedOffers: items.length,
+      missingPrice: candidates.filter((item) => !item.price).length,
+      missingVariantId: candidates.filter((item) => !item.variantId).length,
+      missingOfferUrl: candidates.filter((item) => !item.url).length,
+      unverifiedOffers: candidates.filter((item) => !item.verified).length
     }
   });
   return items;
@@ -66,7 +73,7 @@ async function fetchWildberriesFromApify(query, options = {}) {
   const raw = await runActor({
     actorId,
     token,
-    timeoutMs: Number(process.env.WB_ACTOR_TIMEOUT_MS || 35000),
+    timeoutMs: Number(process.env.WB_ACTOR_TIMEOUT_MS || 90000),
     marketplace: MARKETPLACE,
     input: {
       mode: "search",
@@ -84,7 +91,9 @@ async function fetchWildberriesFromApify(query, options = {}) {
     }
   });
 
-  return raw.map((item) => normalizeApifyProduct(item, MARKETPLACE)).filter((item) => item.price);
+  return raw
+    .map((item) => normalizeApifyProduct(item, MARKETPLACE))
+    .filter((item) => item.price && item.url);
 }
 
 function buildEndpoint(version, query, page = 1) {
@@ -102,56 +111,89 @@ function buildEndpoint(version, query, page = 1) {
 }
 
 function normalizeWildberriesProduct(product) {
-  const prices = extractPrices(product);
   const title = cleanTitle([product.brand, product.name].filter(Boolean).join(" "));
   const productId = String(product.id || product.nmId || "");
-
-  return {
+  const base = {
     marketplace: MARKETPLACE,
     productId,
+    offerId: "",
     title: title || "Товар Wildberries",
-    price: prices.price,
-    oldPrice: prices.oldPrice,
     url: productId ? `https://www.wildberries.ru/catalog/${productId}/detail.aspx` : "",
     image: "",
     seller: product.supplier || "",
     source: "wildberries:search.wb.ru",
     fetchedAt: nowIso()
   };
+  const sizes = Array.isArray(product.sizes) ? product.sizes : [];
+  const offers = sizes
+    .map((size) => normalizeWildberriesSizeOffer(size, base))
+    .filter((item) => item.price);
+
+  if (offers.length) return offers;
+
+  const fallbackPrices = extractProductFallbackPrices(product);
+  if (!fallbackPrices.price) return [];
+
+  return [{
+    ...base,
+    variantId: "",
+    variantName: "",
+    price: fallbackPrices.price,
+    oldPrice: fallbackPrices.oldPrice,
+    priceType: "from",
+    matchType: "possible",
+    verified: false
+  }];
 }
 
-function extractPrices(product) {
-  const sizes = product.sizes || [];
-  const actual = [];
-  const old = [];
+function normalizeWildberriesSizeOffer(size, base) {
+  const prices = extractSizePrices(size);
+  const variantId = String(size.optionId || size.chrtId || size.id || "");
+  const variantName = cleanTitle(size.origName || size.name || "");
 
-  for (const size of sizes) {
-    const price = size.price || {};
-    actual.push(
-      normalizeWbPrice(price.total, true),
-      normalizeWbPrice(price.product, true),
-      normalizeWbPrice(price.sale, true),
-      normalizeWbPrice(price.final, true),
-      normalizeWbPrice(price.salePriceU, true),
-      normalizeWbPrice(price.priceU, true)
-    );
-    old.push(
-      normalizeWbPrice(price.basic, true),
-      normalizeWbPrice(price.price, true),
-      normalizeWbPrice(price.initial, true),
-      normalizeWbPrice(price.basicPriceU, true)
-    );
-  }
+  return {
+    ...base,
+    offerId: variantId,
+    variantId,
+    variantName,
+    price: prices.price,
+    oldPrice: prices.oldPrice,
+    priceType: "exact",
+    matchType: "possible",
+    verified: Boolean(base.productId && variantId && prices.price)
+  };
+}
 
-  actual.push(
+function extractSizePrices(size) {
+  const price = size?.price || {};
+  return selectPrices([
+    normalizeWbPrice(price.total, true),
+    normalizeWbPrice(price.product, true),
+    normalizeWbPrice(price.sale, true),
+    normalizeWbPrice(price.final, true),
+    normalizeWbPrice(price.salePriceU, true),
+    normalizeWbPrice(price.priceU, true)
+  ], [
+    normalizeWbPrice(price.basic, true),
+    normalizeWbPrice(price.price, true),
+    normalizeWbPrice(price.initial, true),
+    normalizeWbPrice(price.basicPriceU, true)
+  ]);
+}
+
+function extractProductFallbackPrices(product) {
+  return selectPrices([
     normalizeWbPrice(product.salePriceU, true),
     normalizeWbPrice(product.priceU, true),
     normalizeWbPrice(product.salePrice, false),
     normalizeWbPrice(product.price, false),
     normalizeWbPrice(product.extended?.clientPriceU, true)
-  );
-  old.push(normalizeWbPrice(product.extended?.basicPriceU, true));
+  ], [
+    normalizeWbPrice(product.extended?.basicPriceU, true)
+  ]);
+}
 
+function selectPrices(actual, old) {
   const normalizedActual = actual.filter((value) => value > 0);
   const normalizedOld = old.filter((value) => value > 0);
 
@@ -168,11 +210,18 @@ function normalizeWbPrice(value, priceU = false) {
   return Math.round(priceU ? number / 100 : number);
 }
 
+function offerKey(item) {
+  return `${item.marketplace}:${item.productId}:${item.variantId}`;
+}
+
 module.exports = {
   buildEndpoint,
-  extractPrices,
+  extractProductFallbackPrices,
+  extractSizePrices,
   fetchWildberriesFromApify,
   fetchWildberries,
   normalizeWbPrice,
-  normalizeWildberriesProduct
+  normalizeWildberriesProduct,
+  normalizeWildberriesSizeOffer,
+  offerKey
 };

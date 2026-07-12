@@ -86,18 +86,26 @@ async function apifyRequest({ token, pathname, options = {}, timeoutMs }) {
 function normalizeApifyProduct(item, marketplace) {
   const platform = String(item.platform || item.marketplace || marketplace).toLowerCase();
   const productId = String(item.id || item.productId || item.product_id || item.sku || item.offerId || item.offer_id || "");
+  const offerId = String(item.offerId || item.offer_id || item.sku || "");
   const url = item.url || item.link || item.productUrl || item.product_url || item.canonicalUrl || item.canonical_url || "";
+  const seller = item.seller || item.shop || item.supplier || "";
 
   return {
     marketplace,
     productId,
+    offerId,
+    variantId: String(item.variantId || item.variant_id || ""),
     title: cleanTitle(item.title || item.name || item.productName || item.product_name || ""),
+    variantName: cleanTitle(item.variantName || item.variant_name || ""),
     price: parsePrice(item.price || item.currentPrice || item.current_price || item.priceValue || item.salePrice),
     oldPrice: parsePrice(item.oldPrice || item.originalPrice || item.beforeDiscountPrice),
+    priceType: "exact",
     url: url || buildMarketplaceUrl(marketplace, productId),
     image: item.image || item.imageUrl || item.image_url || item.picture || item.thumbnail || "",
-    seller: item.seller || item.shop || item.supplier || "",
+    seller,
     source: `apify:${platform}`,
+    matchType: "possible",
+    verified: Boolean(productId && url && seller),
     fetchedAt: item.scrapedAt || nowIso()
   };
 }

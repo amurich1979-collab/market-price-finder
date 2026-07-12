@@ -5,6 +5,7 @@ const { loadEnvFile } = require("./src/env");
 
 loadEnvFile();
 
+const { createOzonJob, getOzonJob } = require("./src/ozon-jobs");
 const { searchMarketplaces } = require("./src/search");
 
 const root = __dirname;
@@ -40,6 +41,28 @@ const server = http.createServer(async (req, res) => {
         }
       }, 500);
     }
+    return;
+  }
+
+  if (url.pathname === "/api/ozon/jobs" && req.method === "POST") {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const query = String(body.query || url.searchParams.get("q") || "").trim();
+    if (!query) {
+      sendJson(res, { error: "Введите поисковый запрос." }, 400);
+      return;
+    }
+    sendJson(res, createOzonJob(query), 202);
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/ozon/jobs/") && req.method === "GET") {
+    const id = decodeURIComponent(url.pathname.replace("/api/ozon/jobs/", ""));
+    const job = getOzonJob(id);
+    if (!job) {
+      sendJson(res, { error: "Ozon job not found." }, 404);
+      return;
+    }
+    sendJson(res, job);
     return;
   }
 
@@ -84,6 +107,31 @@ function serveStatic(pathname, res) {
 function sendJson(res, payload, status = 200) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 1024 * 64) {
+        reject(new Error("Request body is too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on("error", reject);
+  });
 }
 
 function redirect(res, location) {

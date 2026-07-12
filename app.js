@@ -152,12 +152,24 @@ function createSection(marketplace, result = { status: "error", message: "Нет
 function createProductCard(item) {
   const card = document.createElement("article");
   card.className = "product-card";
+  const priceLabel = item.priceType === "from" ? `от ${formatRub(item.price)}` : formatRub(item.price);
+  const accuracy = item.verified ? "точная цена предложения" : "цена от / требует проверки";
+  const match = item.matchType === "exact" ? "точное совпадение" : "возможное совпадение";
+  const details = [
+    item.variantName ? `вариант: ${item.variantName}` : "",
+    item.seller ? `продавец: ${item.seller}` : "",
+    accuracy,
+    match,
+    item.fetchedAt ? `обновлено: ${formatDateTime(item.fetchedAt)}` : "",
+    item.relevanceScore ? `релевантность ${item.relevanceScore}%` : ""
+  ].filter(Boolean);
   card.innerHTML = `
     ${item.image ? `<img class="product-image" src="${escapeHtml(item.image)}" alt="">` : ""}
     <h3>${escapeHtml(item.title)}</h3>
-    <p class="price">${formatRub(item.price)}</p>
+    <p class="price">${escapeHtml(priceLabel)}</p>
     ${item.oldPrice && item.oldPrice > item.price ? `<p class="old-price">${formatRub(item.oldPrice)}</p>` : ""}
-    <p class="meta">${escapeHtml([item.seller, item.source, item.relevanceScore ? `релевантность ${item.relevanceScore}%` : ""].filter(Boolean).join(" · "))}</p>
+    <p class="meta">${escapeHtml(details.join(" · "))}</p>
+    ${item.verified ? "" : `<p class="caution">Не точное предложение: проверьте вариант и продавца на площадке.</p>`}
     <a class="open-link" target="_blank" rel="noreferrer" href="${escapeHtml(item.url)}">Открыть товар</a>
   `;
   return card;
@@ -219,6 +231,17 @@ function formatRub(value) {
     currency: "RUB",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function escapeHtml(value) {

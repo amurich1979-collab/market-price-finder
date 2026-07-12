@@ -5,10 +5,10 @@ const MARKETPLACE = "yandex";
 
 async function fetchYandexMarket(query, options = {}) {
   const timeoutMs = Number(options.timeoutMs || process.env.YANDEX_TIMEOUT_MS || 15000);
-  const htmlProducts = await fetchYandexFromPage(query, timeoutMs).catch(() => []);
+  const pageOffers = await fetchYandexFromPage(query, timeoutMs).catch(() => []);
 
-  if (htmlProducts.length) {
-    return htmlProducts;
+  if (pageOffers.length) {
+    return pageOffers;
   }
 
   const actorId = options.actorId || process.env.YANDEX_ACTOR_ID;
@@ -22,7 +22,9 @@ async function fetchYandexMarket(query, options = {}) {
     input: buildYandexInput(query)
   });
 
-  return raw.map((item) => normalizeApifyProduct(item, MARKETPLACE)).filter((item) => item.url);
+  return raw
+    .map((item) => normalizeApifyProduct(item, MARKETPLACE))
+    .filter((item) => item.price && item.url);
 }
 
 async function fetchYandexFromPage(query, timeoutMs) {
@@ -40,12 +42,20 @@ async function fetchYandexFromPage(query, timeoutMs) {
     return response.text();
   }, timeoutMs, "Yandex Market page");
 
-  const products = [
-    ...parseJsonLdProducts(html),
-    ...parseEmbeddedProductPayloads(html)
-  ];
-
-  return uniqueBy(products.filter((item) => item.price && item.url), (item) => `${item.productId}:${item.price}`);
+  const offers = parseJsonLdProducts(html).filter((item) => item.price && item.url);
+  const items = uniqueBy(offers, offerKey);
+  Object.defineProperty(items, "_diagnostics", {
+    enumerable: false,
+    value: {
+      rawCandidates: offers.length,
+      normalizedOffers: items.length,
+      missingPrice: offers.filter((item) => !item.price).length,
+      missingOfferUrl: offers.filter((item) => !item.url).length,
+      missingVariantId: 0,
+      unverifiedOffers: offers.filter((item) => !item.verified).length
+    }
+  });
+  return items;
 }
 
 function parseJsonLdProducts(html) {
@@ -74,75 +84,49 @@ function collectJsonLdProducts(node, products) {
   if (typeof node !== "object") return;
 
   if (node["@type"] === "Product") {
-    const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers;
-    products.push(normalizeYandexProduct({
-      id: node.sku || node.productID || node["@id"],
-      title: node.name,
-      price: offer?.price,
-      oldPrice: null,
-      url: offer?.url || node.url || node["@id"],
-      image: Array.isArray(node.image) ? node.image[0] : node.image,
-      seller: offer?.seller?.name
-    }));
+    const offers = Array.isArray(node.offers) ? node.offers : [node.offers].filter(Boolean);
+    for (const offer of offers) {
+      products.push(normalizeYandexOffer(node, offer));
+    }
   }
 
   Object.values(node).forEach((value) => collectJsonLdProducts(value, products));
 }
 
-function parseEmbeddedProductPayloads(html) {
-  const products = [];
-  const productFragments = html.match(/"@type":"Product"[\s\S]{0,2500}?"priceCurrency":"RUB"/g) || [];
+function normalizeYandexOffer(product, offer = {}) {
+  const offerUrl = offer.url || "";
+  const fallbackUrl = product.url || product["@id"] || "";
+  const productId = String(product.sku || product.productID || pickIdFromUrl(fallbackUrl) || product["@id"] || "");
+  const offerId = String(offer.sku || offer.offerId || offer["@id"] || pickIdFromUrl(offerUrl) || "");
+  const verified = Boolean(offerUrl && offer.price);
 
-  for (const fragment of productFragments) {
-    const title = pickJsonString(fragment, "name");
-    const url = pickJsonString(fragment, "url") || pickJsonString(fragment, "@id");
-    const image = pickJsonString(fragment, "image");
-    const priceMatch = fragment.match(/"price":(\d+)/);
-    const price = priceMatch ? Number(priceMatch[1]) : null;
-
-    if (title && url && price) {
-      products.push(normalizeYandexProduct({
-        id: pickIdFromUrl(url),
-        title,
-        price,
-        url,
-        image
-      }));
-    }
-  }
-
-  return products;
+  return {
+    marketplace: MARKETPLACE,
+    productId,
+    offerId,
+    variantId: "",
+    title: cleanTitle(product.name),
+    variantName: cleanTitle(offer.name || ""),
+    price: parsePrice(offer.price || offer.lowPrice),
+    oldPrice: parsePrice(offer.highPrice || offer.oldPrice),
+    priceType: verified ? "exact" : "from",
+    seller: offer.seller?.name || offer.offeredBy?.name || "",
+    url: offerUrl || fallbackUrl,
+    image: Array.isArray(product.image) ? product.image[0] : product.image || "",
+    source: "yandex:json-ld",
+    matchType: "possible",
+    verified,
+    fetchedAt: nowIso()
+  };
 }
 
-function pickJsonString(fragment, key) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = fragment.match(new RegExp(`"${escaped}":"((?:\\\\.|[^"])*)"`));
-  if (!match) return "";
-  try {
-    return cleanTitle(JSON.parse(`"${match[1].replace(/"/g, '\\"')}"`));
-  } catch {
-    return cleanTitle(match[1]);
-  }
+function parseEmbeddedProductPayloads() {
+  return [];
 }
 
 function pickIdFromUrl(url) {
   const match = String(url).match(/\/(\d+)(?:[/?#]|$)/);
-  return match ? match[1] : String(url);
-}
-
-function normalizeYandexProduct(item) {
-  return {
-    marketplace: MARKETPLACE,
-    productId: String(item.id || pickIdFromUrl(item.url || "")),
-    title: cleanTitle(item.title),
-    price: parsePrice(item.price),
-    oldPrice: parsePrice(item.oldPrice),
-    url: item.url || "",
-    image: item.image || "",
-    seller: item.seller || "",
-    source: "yandex:page-json",
-    fetchedAt: nowIso()
-  };
+  return match ? match[1] : "";
 }
 
 function buildYandexInput(query) {
@@ -155,8 +139,14 @@ function buildYandexInput(query) {
   };
 }
 
+function offerKey(item) {
+  return `${item.marketplace}:${item.productId}:${item.offerId || item.url}`;
+}
+
 module.exports = {
   fetchYandexMarket,
+  normalizeYandexOffer,
+  offerKey,
   parseEmbeddedProductPayloads,
   parseJsonLdProducts
 };
