@@ -1,8 +1,12 @@
 const { normalizeApifyProduct, runActor } = require("../apify");
+const { extractMarketplaceOffers } = require("../scrapegraph");
 
 const MARKETPLACE = "ozon";
 
 async function fetchOzon(query, options = {}) {
+  const scrapeGraphItems = await fetchOzonFromScrapeGraph(query, options).catch(() => []);
+  if (scrapeGraphItems.length) return scrapeGraphItems;
+
   const timeoutMs = Number(options.timeoutMs || process.env.OZON_TIMEOUT_MS || 90000);
   const actorId = options.actorId || process.env.OZON_ACTOR_ID || process.env.APIFY_ACTOR_ID;
   const token = options.token || process.env.APIFY_TOKEN;
@@ -33,6 +37,17 @@ async function fetchOzon(query, options = {}) {
   return items;
 }
 
+async function fetchOzonFromScrapeGraph(query, options = {}) {
+  const items = await extractMarketplaceOffers({
+    marketplace: MARKETPLACE,
+    query,
+    url: `https://www.ozon.ru/search/?text=${encodeURIComponent(query)}`,
+    timeoutMs: options.scrapeGraphTimeoutMs || process.env.OZON_SCRAPEGRAPH_TIMEOUT_MS || process.env.SCRAPEGRAPH_TIMEOUT_MS
+  });
+
+  return items.filter((item) => item.verified && !isSearchUrl(item.url));
+}
+
 function buildOzonInput(query) {
   return {
     mode: "search",
@@ -57,5 +72,6 @@ function isSearchUrl(url) {
 module.exports = {
   buildOzonInput,
   fetchOzon,
+  fetchOzonFromScrapeGraph,
   isSearchUrl
 };

@@ -1,5 +1,6 @@
 const { cleanTitle, nowIso, uniqueBy, withTimeout } = require("../utils");
 const { normalizeApifyProduct, runActor } = require("../apify");
+const { extractMarketplaceOffers } = require("../scrapegraph");
 
 const MARKETPLACE = "wb";
 const PAGES = [1, 2, 3];
@@ -36,6 +37,8 @@ async function fetchWildberries(query, options = {}) {
       } catch (error) {
         lastError = error;
         if (version === versions[versions.length - 1] && page === PAGES[PAGES.length - 1] && candidates.length === 0) {
+          const scrapeGraphItems = await fetchWildberriesFromScrapeGraph(query, options).catch(() => []);
+          if (scrapeGraphItems.length) return scrapeGraphItems;
           return fetchWildberriesFromApify(query, options).catch(() => {
             throw lastError;
           });
@@ -47,6 +50,10 @@ async function fetchWildberries(query, options = {}) {
   }
 
   const items = uniqueBy(candidates, offerKey).slice(0, 120);
+  if (!items.length) {
+    const scrapeGraphItems = await fetchWildberriesFromScrapeGraph(query, options).catch(() => []);
+    if (scrapeGraphItems.length) return scrapeGraphItems;
+  }
   Object.defineProperty(items, "_diagnostics", {
     enumerable: false,
     value: {
@@ -60,6 +67,15 @@ async function fetchWildberries(query, options = {}) {
     }
   });
   return items;
+}
+
+async function fetchWildberriesFromScrapeGraph(query, options = {}) {
+  return extractMarketplaceOffers({
+    marketplace: MARKETPLACE,
+    query,
+    url: `https://www.wildberries.ru/catalog/0/search.aspx?search=${encodeURIComponent(query)}`,
+    timeoutMs: options.scrapeGraphTimeoutMs || process.env.WB_SCRAPEGRAPH_TIMEOUT_MS || process.env.SCRAPEGRAPH_TIMEOUT_MS
+  });
 }
 
 async function fetchWildberriesFromApify(query, options = {}) {
@@ -218,6 +234,7 @@ module.exports = {
   buildEndpoint,
   extractProductFallbackPrices,
   extractSizePrices,
+  fetchWildberriesFromScrapeGraph,
   fetchWildberriesFromApify,
   fetchWildberries,
   normalizeWbPrice,

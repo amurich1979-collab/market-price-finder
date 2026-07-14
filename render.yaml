@@ -11,6 +11,16 @@ services:
         value: production
       - key: APIFY_TOKEN
         sync: false
+      - key: SGAI_API_KEY
+        sync: false
+      - key: SCRAPEGRAPH_ENDPOINT
+        value: https://v2-api.scrapegraphai.com/api/extract
+      - key: SCRAPEGRAPH_TIMEOUT_MS
+        value: "45000"
+      - key: SCRAPEGRAPH_COUNTRY
+        value: ru
+      - key: SCRAPEGRAPH_STEALTH
+        value: "true"
       - key: APIFY_ACTOR_ID
         value: isolovyev/ru-marketplaces-price-monitor
       - key: OZON_ACTOR_ID
@@ -27,9 +37,15 @@ services:
         value: "35000"
       - key: OZON_TIMEOUT_MS
         value: "90000"
+      - key: OZON_SCRAPEGRAPH_TIMEOUT_MS
+        value: "45000"
       - key: WB_TIMEOUT_MS
         value: "12000"
       - key: WB_ACTOR_TIMEOUT_MS
         value: "90000"
+      - key: WB_SCRAPEGRAPH_TIMEOUT_MS
+        value: "30000"
       - key: YANDEX_TIMEOUT_MS
         value: "15000"
+      - key: YANDEX_SCRAPEGRAPH_TIMEOUT_MS
+        value: "30000"

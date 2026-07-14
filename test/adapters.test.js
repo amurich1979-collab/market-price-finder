@@ -1,23 +1,31 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { normalizeApifyProduct, runActor } = require("../src/apify");
+const { fetchOzonFromScrapeGraph } = require("../src/adapters/ozon");
 const { cacheTtlFor, dedupeKey, selectRelevant, searchMarketplaces } = require("../src/search");
 const {
   extractProductFallbackPrices,
   extractSizePrices,
   fetchWildberries,
+  fetchWildberriesFromScrapeGraph,
   normalizeWildberriesProduct
 } = require("../src/adapters/wildberries");
 const {
+  fetchYandexFromScrapeGraph,
   normalizeYandexOffer,
   parseJsonLdProducts
 } = require("../src/adapters/yandex-market");
+const { normalizeScrapeGraphOffer, productIdFromUrl } = require("../src/scrapegraph");
 
 function responseJson(payload) {
   return {
     ok: true,
     json: async () => payload
   };
+}
+
+function scrapeGraphResponse(offers) {
+  return responseJson({ id: "sg-test", json: { offers } });
 }
 
 function responseText(payload) {
@@ -278,6 +286,131 @@ test("Ozon normalizer recognizes snake_case fields", () => {
   assert.equal(item.title, "SSD Samsung 2TB");
   assert.equal(item.price, 12990);
   assert.equal(item.verified, true);
+});
+
+test("ScrapeGraphAI normalizer verifies concrete Ozon product offers", () => {
+  const item = normalizeScrapeGraphOffer({
+    productId: "123456",
+    title: "Lavazza Oro 1 kg",
+    price: "1 077",
+    seller: "Ozon seller",
+    url: "https://www.ozon.ru/product/lavazza-oro-123456/",
+    image: "https://example.test/image.webp"
+  }, "ozon");
+
+  assert.equal(item.productId, "123456");
+  assert.equal(item.price, 1077);
+  assert.equal(item.verified, true);
+  assert.equal(item.source, "scrapegraph:ozon");
+});
+
+test("ScrapeGraphAI rejects Ozon search URLs as verified offers", () => {
+  const item = normalizeScrapeGraphOffer({
+    title: "Lavazza Oro",
+    price: 1000,
+    seller: "seller",
+    url: "https://www.ozon.ru/search/?text=lavazza"
+  }, "ozon");
+
+  assert.equal(item.verified, false);
+  assert.equal(item.priceType, "from");
+});
+
+test("Ozon ScrapeGraphAI source is used when configured", async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.SGAI_API_KEY;
+  process.env.SGAI_API_KEY = "test-key";
+  let called = false;
+
+  global.fetch = async (url, options = {}) => {
+    called = true;
+    assert.equal(String(url).includes("scrapegraphai.com") || String(url).includes("/api/extract"), true);
+    assert.equal(options.headers["SGAI-APIKEY"], "test-key");
+    return scrapeGraphResponse([
+      {
+        productId: "123",
+        title: "Lavazza Oro 1 kg",
+        price: 1077,
+        seller: "Ozon seller",
+        url: "https://www.ozon.ru/product/lavazza-oro-123/"
+      }
+    ]);
+  };
+
+  try {
+    const items = await fetchOzonFromScrapeGraph("lavazza oro", { scrapeGraphTimeoutMs: 5000 });
+
+    assert.equal(called, true);
+    assert.equal(items.length, 1);
+    assert.equal(items[0].marketplace, "ozon");
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey == null) delete process.env.SGAI_API_KEY;
+    else process.env.SGAI_API_KEY = originalKey;
+  }
+});
+
+test("WB ScrapeGraphAI fallback can return variant offers", async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.SGAI_API_KEY;
+  process.env.SGAI_API_KEY = "test-key";
+
+  global.fetch = async () => scrapeGraphResponse([
+    {
+      productId: "999",
+      variantId: "v1",
+      title: "Apple iPhone 15 128GB",
+      variantName: "128GB black",
+      price: 60000,
+      seller: "Wildberries",
+      url: "https://www.wildberries.ru/catalog/999/detail.aspx"
+    }
+  ]);
+
+  try {
+    const items = await fetchWildberriesFromScrapeGraph("iphone 15 128gb", { scrapeGraphTimeoutMs: 5000 });
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].variantId, "v1");
+    assert.equal(items[0].verified, true);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey == null) delete process.env.SGAI_API_KEY;
+    else process.env.SGAI_API_KEY = originalKey;
+  }
+});
+
+test("Yandex ScrapeGraphAI fallback can return offer URL", async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.SGAI_API_KEY;
+  process.env.SGAI_API_KEY = "test-key";
+
+  global.fetch = async () => scrapeGraphResponse([
+    {
+      productId: "model-1",
+      offerId: "offer-1",
+      title: "Apple iPhone 15 128GB",
+      price: 65000,
+      seller: "Shop",
+      url: "https://market.yandex.ru/offer/offer-1"
+    }
+  ]);
+
+  try {
+    const items = await fetchYandexFromScrapeGraph("iphone 15 128gb", { scrapeGraphTimeoutMs: 5000 });
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].offerId, "offer-1");
+    assert.equal(items[0].source, "scrapegraph:yandex");
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey == null) delete process.env.SGAI_API_KEY;
+    else process.env.SGAI_API_KEY = originalKey;
+  }
+});
+
+test("ScrapeGraphAI product id extraction supports Ozon product URLs", () => {
+  assert.equal(productIdFromUrl("https://www.ozon.ru/product/lavazza-oro-123456/", "ozon"), "123456");
 });
 
 function offer(marketplace, productId, variantId, title, price) {

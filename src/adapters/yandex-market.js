@@ -1,4 +1,5 @@
 const { normalizeApifyProduct, runActor } = require("../apify");
+const { extractMarketplaceOffers } = require("../scrapegraph");
 const { cleanTitle, decodeHtml, nowIso, parsePrice, uniqueBy, withTimeout } = require("../utils");
 
 const MARKETPLACE = "yandex";
@@ -9,6 +10,11 @@ async function fetchYandexMarket(query, options = {}) {
 
   if (pageOffers.length) {
     return pageOffers;
+  }
+
+  const scrapeGraphOffers = await fetchYandexFromScrapeGraph(query, options).catch(() => []);
+  if (scrapeGraphOffers.length) {
+    return scrapeGraphOffers;
   }
 
   const actorId = options.actorId || process.env.YANDEX_ACTOR_ID;
@@ -25,6 +31,15 @@ async function fetchYandexMarket(query, options = {}) {
   return raw
     .map((item) => normalizeApifyProduct(item, MARKETPLACE))
     .filter((item) => item.price && item.url);
+}
+
+async function fetchYandexFromScrapeGraph(query, options = {}) {
+  return extractMarketplaceOffers({
+    marketplace: MARKETPLACE,
+    query,
+    url: `https://market.yandex.ru/search?text=${encodeURIComponent(query)}`,
+    timeoutMs: options.scrapeGraphTimeoutMs || process.env.YANDEX_SCRAPEGRAPH_TIMEOUT_MS || process.env.SCRAPEGRAPH_TIMEOUT_MS
+  });
 }
 
 async function fetchYandexFromPage(query, timeoutMs) {
@@ -145,6 +160,7 @@ function offerKey(item) {
 
 module.exports = {
   fetchYandexMarket,
+  fetchYandexFromScrapeGraph,
   normalizeYandexOffer,
   offerKey,
   parseEmbeddedProductPayloads,
